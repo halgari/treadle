@@ -2,7 +2,7 @@ import dis
 import types
 import struct
 
-from io import StringIO
+from io import BytesIO
 
 
 
@@ -17,20 +17,29 @@ class AExpression(object):
         pass
 
     def toCode(self):
-        size, max_seen = self.size(0, 0)
-        if size != 1:
-            raise Exception("Unbalanced stack")
+
+        expr = self
+
+        if not isinstance(self, Return):
+            expr = Return(self)
+
+        size, max_seen = expr.size(0, 0)
 
         ctx = Context()
-        self.emit(ctx)
+
+
+        expr.emit(ctx)
 
         code = ctx.stream.getvalue()
+        if size != 0:
+            raise Exception("Unbalanced stack")
 
-        consts = None * len(ctx.consts)
+        consts = [None] * (len(ctx.consts) + 1)
         for k, v in ctx.consts.items():
-            consts[v] = k.getConst()
-        
-        return NewCode(0, 0, size, 0, code, consts, [], [], "<string>", "foo", 0, {}, {}, {})
+            consts[v + 1] = k.getConst()
+        print repr(code), len(code), consts
+
+        return NewCode(0, 0, size, 0, code, tuple(consts), (), (), "<string>", "foo", 0, "", (), ())
 
     def toFunc(self):
         c = self.toCode()
@@ -41,7 +50,23 @@ class IAssignable(object):
     """defines an expression that can be on the left side of an assign expression"""
     pass
 
+class Return(AExpression):
+    """defines an explicit 'return' in the code """
+    def __init__(self, expr):
+        if not isinstance(expr, AExpression):
+            raise Exception("Return must take an expression as an argument")
 
+        self.expr = expr
+
+    def emit(self, ctx):
+        self.expr.emit(ctx)
+
+        data = struct.pack("=B", RETURN_VALUE)
+        ctx.stream.write(data)
+
+    def size(self, current, max_seen):
+        current, max_seen = self.expr.size(current, max_seen)
+        return current - 1, max_seen
 
 class Const(AExpression):
     """defines a constant that will generate a LOAD_CONST bytecode. Note: Const objects
@@ -58,7 +83,8 @@ class Const(AExpression):
             ctx.consts[self] = len(ctx.consts)
         idx = len(ctx.consts)
 
-        data = struct.pack("BH", LOAD_CONST, idx)
+        data = struct.pack("=BH", LOAD_CONST, idx)
+        print len(data)
         ctx.stream.write(data)
 
     def getConst(self):
@@ -72,7 +98,7 @@ class Const(AExpression):
 class Context(object):
     """defines a compilation context this keeps track of locals, output streams, etc"""
     def __init__(self):
-        self.stream = StringIO()
+        self.stream = BytesIO()
         self.consts = {}
 
     def writeByte(self):
