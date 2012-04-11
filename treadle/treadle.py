@@ -37,7 +37,6 @@ class AExpression(object):
         consts = [None] * (len(ctx.consts) + 1)
         for k, v in ctx.consts.items():
             consts[v + 1] = k.getConst()
-        print repr(code), len(code), consts
 
         return NewCode(0, 0, size, 0, code, tuple(consts), (), (), "<string>", "foo", 0, "", (), ())
 
@@ -84,7 +83,6 @@ class Const(AExpression):
         idx = len(ctx.consts)
 
         data = struct.pack("=BH", LOAD_CONST, idx)
-        print len(data)
         ctx.stream.write(data)
 
     def getConst(self):
