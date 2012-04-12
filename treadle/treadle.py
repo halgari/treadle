@@ -2,7 +2,10 @@ import dis
 import types
 import struct
 
-from io import BytesIO
+from .treadle_exceptions import *
+from .compat import version, _Jump
+
+from io import BytesIO, SEEK_END
 
 
 
@@ -32,13 +35,15 @@ class AExpression(object):
 
         code = ctx.stream.getvalue()
         if size != 0:
-            raise Exception("Unbalanced stack")
+            raise UnbalancedStackException("Unbalanced stack")
+
+        print repr(code)
 
         consts = [None] * (len(ctx.consts) + 1)
-        for k, v in ctx.consts.items():
+        for k, v in list(ctx.consts.items()):
             consts[v + 1] = k.getConst()
-
-        return NewCode(0, 0, size, 0, code, tuple(consts), (), (), "<string>", "foo", 0, "", (), ())
+        consts = tuple(consts)
+        return newCode(co_code = code, co_stacksize = size, co_consts = consts)
 
     def toFunc(self):
         c = self.toCode()
@@ -53,7 +58,7 @@ class Return(AExpression):
     """defines an explicit 'return' in the code """
     def __init__(self, expr):
         if not isinstance(expr, AExpression):
-            raise Exception("Return must take an expression as an argument")
+            raise ExpressionRequiredException()
 
         self.expr = expr
 
@@ -72,7 +77,7 @@ class Const(AExpression):
        do no intern their constants, that is left to the language implementors"""
     def __init__(self, const):
         if isinstance(const, AExpression):
-            raise Exception("Const cannot take an expression as an argument")
+            raise ExpressionNotAllowedException()
 
         self.value = const
 
@@ -92,6 +97,53 @@ class Const(AExpression):
         current += 1
         return current, max(current, max_seen)
 
+class If(AExpression):
+    def __init__(self, condition, thenexpr, elseexpr = None):
+        if elseexpr == None:
+            elseexpr = Const(None)
+
+        self.exprs = [condition, thenexpr, elseexpr]
+
+        for x in self.exprs:
+            if not isinstance(x, AExpression):
+                raise ExpressionRequiredException()
+
+        self.condition = condition
+        self.thenexpr = thenexpr
+        self.elseexpr = elseexpr
+
+    def size(self, current, max_seen):
+        for x in self.exprs:
+            _ , new_max = x.size(current, max_seen)
+            max_seen = max(max_seen, new_max)
+
+        return current + 1, max_seen
+
+    def emit(self, ctx):
+        self.condition.emit(ctx)
+
+        elsejump = _Jump(ctx, POP_JUMP_IF_FALSE)
+
+
+
+        self.thenexpr.emit(ctx)
+
+        endofif = _Jump(ctx, JUMP_ABSOLUTE)
+
+        elsejump.mark()
+
+        self.elseexpr.emit(ctx)
+
+        endofif.mark()
+
+        print repr(ctx.stream.getvalue())
+
+
+
+
+
+
+
 
 class Context(object):
     """defines a compilation context this keeps track of locals, output streams, etc"""
@@ -99,21 +151,18 @@ class Context(object):
         self.stream = BytesIO()
         self.consts = {}
 
-    def writeByte(self):
-        self.stream.write
 
 
 
 
-def NewCode(co_argcount, co_nlocals, co_stacksize, co_flags,
-            co_code, co_consts, co_names, co_varnames,
-            filename, name, firstlineno, co_lnotab,
-            co_freevars, co_cellvars):
+def newCode(co_argcount = 0, co_nlocals = 0, co_stacksize = 0, co_flags = 0x0000,
+            co_code = bytes(), co_consts = (), co_names = (), co_varnames = (),
+            filename = "<string>", name = "", firstlineno = 0, co_lnotab = bytes(),
+            co_freevars = (), co_cellvars = ()):
     """wrapper for CodeType so that we can remember the synatax"""
     return types.CodeType(co_argcount, co_nlocals, co_stacksize,
                           co_flags, co_code, co_consts, co_names, co_varnames,
-                          filename, name, firstlineno, co_lnotab,
-                          co_freevars, co_cellvars)
+                          filename, name, firstlineno, co_lnotab, co_freevars, co_cellvars)
 
 
 ### Taken from byteplay.py
