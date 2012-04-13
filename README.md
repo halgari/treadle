@@ -1,4 +1,3 @@
-
 Treadle
 =======
 
@@ -23,3 +22,15 @@ Cleveland: Well what on earth does that mean?
 
 Chapman: *I* don't know - Mr Wentworth just told me to come in here and say that there was trouble at the mill, that's all - I didn't expect a kind of Spanish Inquisition.
 
+
+-------------
+
+Treadle is a library for easily building compilers and code generators in Python. Using trees of objects, we can easily construct functions. For example:
+
+          import math
+ 
+          a = Local("a")
+          b = Local("b")
+          expr = Call(Attr(Const(math), "sqrt"), 
+                      Add(Mul(a, a), Mul(b, b)))
+          expr.toFunc(a, b)
