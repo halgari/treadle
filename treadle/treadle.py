@@ -139,8 +139,30 @@ class If(AExpression):
         endofif.mark()
 
 
+class ABinaryOp(AExpression):
+    def __init__(self, a, b, op):
+        self.a = a
+        self.b = b
+        self.op = op
 
+    def size(self, current, max_seen):
+        current, max_seen = self.a.size(current, max_seen)
+        current, max_seen = self.b.size(current, max_seen)
 
+        return current - 1, max_seen
+
+    def emit(self, ctx):
+        self.a.emit(ctx)
+        self.b.emit(ctx)
+        ctx.stream.write(struct.pack("=B", self.op))
+
+class Add(ABinaryOp):
+    def __init__(self, a, b):
+        ABinaryOp.__init__(self, a, b, BINARY_ADD)
+
+class Subtract(ABinaryOp):
+    def __init__(self, a, b):
+        ABinaryOp.__init__(self, a, b, BINARY_SUBTRACT)
 
 
 

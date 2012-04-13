@@ -1,5 +1,5 @@
 import unittest
-from treadle.treadle import Const, Return, AExpression, If
+from treadle.treadle import Const, Return, AExpression, If, Add, Subtract
 from treadle.treadle_exceptions import *
 from treadle.macros import And
 
@@ -41,6 +41,13 @@ class AbstractExpression(unittest.TestCase):
 
         self.assertRaises(UnbalancedStackException, UnbalancedStackExpression().toCode)
 
+class AddExpression(unittest.TestCase):
+    def test_Add(self):
+        self.assertEqual(Add(Const(1), Const(2)).toFunc()(), 3)
+
+class SubExpression(unittest.TestCase):
+    def test_Sub(self):
+        self.assertEqual(Subtract(Const(3), Const(2)).toFunc()(), 1)
 
 class AndExpression(unittest.TestCase):
     def test_And(self):
