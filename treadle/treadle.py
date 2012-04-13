@@ -3,7 +3,7 @@ import types
 import struct
 
 from .treadle_exceptions import *
-from .compat import version, _Jump
+from .compat import version, _Jump, newCode
 
 from io import BytesIO, SEEK_END
 
@@ -36,8 +36,6 @@ class AExpression(object):
         code = ctx.stream.getvalue()
         if size != 0:
             raise UnbalancedStackException("Unbalanced stack")
-
-        print repr(code)
 
         consts = [None] * (len(ctx.consts) + 1)
         for k, v in list(ctx.consts.items()):
@@ -136,8 +134,6 @@ class If(AExpression):
 
         endofif.mark()
 
-        print repr(ctx.stream.getvalue())
-
 
 
 
@@ -154,15 +150,6 @@ class Context(object):
 
 
 
-
-def newCode(co_argcount = 0, co_nlocals = 0, co_stacksize = 0, co_flags = 0x0000,
-            co_code = bytes(), co_consts = (), co_names = (), co_varnames = (),
-            filename = "<string>", name = "", firstlineno = 0, co_lnotab = bytes(),
-            co_freevars = (), co_cellvars = ()):
-    """wrapper for CodeType so that we can remember the synatax"""
-    return types.CodeType(co_argcount, co_nlocals, co_stacksize,
-                          co_flags, co_code, co_consts, co_names, co_varnames,
-                          filename, name, firstlineno, co_lnotab, co_freevars, co_cellvars)
 
 
 ### Taken from byteplay.py
