@@ -1,5 +1,4 @@
 import platform, struct, dis
-from io import SEEK_END
 import types
 
 version = "".join(platform.python_version_tuple()[:2])
@@ -8,22 +7,48 @@ for x in dis.opmap:
     globals()[x] = dis.opmap[x]
 
 
-class _Jump_27(object):
-    def __init__(self, ctx, bc):
-        self.bc = bc
+class _Cond_Jump26(object):
+    def __init__(self, ctx):
         self.loc = ctx.stream.tell()
         self.ctx = ctx
-        ctx.stream.write(struct.pack("=BH", self.bc, 0xFFFF))
+        ctx.stream.write(struct.pack("=BHB", 0xFF, 0xFFFF, POP_TOP))
+
+    def mark(self):
+        self.jumpto = self.ctx.stream.tell()
+        self.ctx.stream.seek(self.loc)
+        self.ctx.stream.write(struct.pack("=BH", JUMP_IF_FALSE, self.jumpto - self.loc - 3))
+
+        self.ctx.stream.seek(0, SEEK_END)
+        self.ctx.stream.write(struct.pack("=B", POP_TOP))
+
+
+class AbsoluteJump(object):
+    def __init__(self, ctx):
+        self.loc = ctx.stream.tell()
+        self.ctx = ctx
+        ctx.stream.write(struct.pack("=BH", JUMP_ABSOLUTE, 0xFFFF))
+
+    def mark(self):
+        self.jumpto = self.ctx.stream.tell()
+        self.ctx.stream.seek(self.loc)
+        self.ctx.stream.write(struct.pack("=BH", JUMP_ABSOLUTE, self.jumpto))
+
+        self.ctx.stream.seek(0, SEEK_END)
+
+
+
+class _Cond_Jump27(object):
+    def __init__(self, ctx):
+        self.loc = ctx.stream.tell()
+        self.ctx = ctx
+        ctx.stream.write(struct.pack("=BH", POP_JUMP_IF_FALSE, 0xFFFF))
         self.jumpto = 0
 
     def mark(self):
         self.jumpto = self.ctx.stream.tell()
         self.ctx.stream.seek(self.loc)
 
-        if self.bc == JUMP_ABSOLUTE or self.bc == POP_JUMP_IF_FALSE:
-            self.ctx.stream.write(struct.pack("=BH", self.bc, self.jumpto))
-        else:
-            self.ctx.stream.write(struct.pack("=BH", self.bc, self.jumpto - self.loc))
+        self.ctx.stream.write(struct.pack("=BH", POP_JUMP_IF_FALSE, self.jumpto))
 
         self.ctx.stream.seek(0, SEEK_END)
 
@@ -66,10 +91,15 @@ def newCode2(co_argcount = 0, co_nlocals = 0, co_stacksize = 0, co_flags = 0x000
         co_flags, co_code, co_consts, co_names, co_varnames,
         filename, name, firstlineno, co_lnotab, co_freevars, co_cellvars)
 
+
+
 if version == "26":
     _Jump = _Jump_26
+    CondJump = _Cond_Jump26
+    from os import SEEK_END
 else:
-    _Jump = _Jump_27
+    CondJump = _Cond_Jump27
+    from io import SEEK_END
 
 if int(version) < 30:
     newCode = newCode2

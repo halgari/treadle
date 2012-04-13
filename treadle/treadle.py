@@ -3,9 +3,9 @@ import types
 import struct
 
 from .treadle_exceptions import *
-from .compat import version, _Jump, newCode
+from .compat import version, newCode, SEEK_END, CondJump, AbsoluteJump
 
-from io import BytesIO, SEEK_END
+from io import BytesIO
 
 
 
@@ -41,7 +41,11 @@ class AExpression(object):
         for k, v in list(ctx.consts.items()):
             consts[v + 1] = k.getConst()
         consts = tuple(consts)
-        return newCode(co_code = code, co_stacksize = size, co_consts = consts)
+        print(repr(code))
+        c = newCode(co_code = code, co_stacksize = size, co_consts = consts)
+        import dis
+        dis.dis(c)
+        return c
 
     def toFunc(self):
         c = self.toCode()
@@ -120,13 +124,13 @@ class If(AExpression):
     def emit(self, ctx):
         self.condition.emit(ctx)
 
-        elsejump = _Jump(ctx, POP_JUMP_IF_FALSE)
+        elsejump = CondJump(ctx)
 
 
 
         self.thenexpr.emit(ctx)
 
-        endofif = _Jump(ctx, JUMP_ABSOLUTE)
+        endofif = AbsoluteJump(ctx)
 
         elsejump.mark()
 
