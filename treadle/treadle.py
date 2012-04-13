@@ -172,3 +172,7 @@ CO_GENERATOR_ALLOWED      = 0x1000      # unused
 CO_FUTURE_DIVISION        = 0x2000
 CO_FUTURE_ABSOLUTE_IMPORT = 0x4000
 CO_FUTURE_WITH_STATEMENT  = 0x8000
+
+
+ConstTrue = Const(True)
+ConstFalse = Const(False)

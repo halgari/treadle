@@ -1,6 +1,7 @@
 import unittest
 from treadle.treadle import Const, Return, AExpression, If
 from treadle.treadle_exceptions import *
+from treadle.macros import And
 
 class ConstTests(unittest.TestCase):
     def setUp(self):
@@ -39,6 +40,17 @@ class AbstractExpression(unittest.TestCase):
                 pass
 
         self.assertRaises(UnbalancedStackException, UnbalancedStackExpression().toCode)
+
+
+class AndExpression(unittest.TestCase):
+    def test_And(self):
+        self.assertFalse(And(Const(0), Const(0), Const(0)).toFunc()())
+        self.assertFalse(And(Const(1), Const(0), Const(0)).toFunc()())
+        self.assertFalse(And(Const(0), Const(1), Const(0)).toFunc()())
+        self.assertFalse(And(Const(0), Const(0), Const(1)).toFunc()())
+        self.assertFalse(And(Const(0), Const(1), Const(1)).toFunc()())
+        self.assertTrue(And(Const(1), Const(1), Const(1)).toFunc()())
+
 
 
 
