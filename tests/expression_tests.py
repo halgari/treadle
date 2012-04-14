@@ -1,5 +1,5 @@
 import unittest
-from treadle.treadle import Const, Return, AExpression, If, Add, Subtract
+from treadle.treadle import Const, Return, AExpression, If, Add, Subtract, Do
 from treadle.treadle_exceptions import *
 from treadle.macros import And
 
@@ -58,7 +58,15 @@ class AndExpression(unittest.TestCase):
         self.assertFalse(And(Const(0), Const(1), Const(1)).toFunc()())
         self.assertTrue(And(Const(1), Const(1), Const(1)).toFunc()())
 
+class DoExpresion(unittest.TestCase):
+    def test_Do(self):
+        self.assertEqual(Do(Const(0), Const(1), Const(2)).toFunc()(), 2)
+        self.assertEqual(Do(Const(0), Const(1)).toFunc()(), 1)
+        self.assertEqual(Do(Const(0)).toFunc()(), 0)
+        self.assertEqual(Do().toFunc()(), None)
 
+    def test_Args(self):
+        self.assertRaises(ExpressionRequiredException, Do, Const(False), 1)
 
 
 

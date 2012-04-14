@@ -164,6 +164,33 @@ class Subtract(ABinaryOp):
     def __init__(self, a, b):
         ABinaryOp.__init__(self, a, b, BINARY_SUBTRACT)
 
+class Do(AExpression):
+    def __init__(self, *exprs):
+        if not exprs:
+            exprs = [Const(None)]
+
+        for x in exprs:
+            if not isinstance(x, AExpression):
+                raise ExpressionRequiredException()
+        self.exprs = exprs
+
+    def size(self, current, max_seen):
+        last = self.exprs[-1]
+        for x in self.exprs:
+            current, max_seen = x.size(current, max_seen)
+            if last is not x:
+                current -= 1
+
+        return current, max_seen
+
+    def emit(self, ctx):
+        last = self.exprs[-1]
+        for x in self.exprs:
+            x.emit(ctx)
+            if last is not x:
+                ctx.stream.write(struct.pack("=B", POP_TOP))
+
+
 
 
 
