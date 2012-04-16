@@ -1,5 +1,5 @@
 import unittest
-from treadle.treadle import Const, Return, AExpression, If, Add, Subtract, Do, Func, Argument
+from treadle.treadle import Const, Return, AExpression, If, Add, Subtract, Do, Func, Argument, StoreLocal, Local
 from treadle.treadle_exceptions import *
 from treadle.macros import And
 
@@ -76,6 +76,11 @@ class ArgTests(unittest.TestCase):
     def test_Argument(self):
         a = Argument("a")
         self.assertEqual(Func([a], a).toFunc()(42), 42)
+
+class StoreLocalTests(unittest.TestCase):
+    def test_StoreLocal(self):
+        a = Local("a")
+        self.assertEqual(StoreLocal(a, Const(42)).toFunc()(), 42)
 
 
 
