@@ -247,6 +247,28 @@ class Local(AExpression, IAssignable):
 
         ctx.stream.write(struct.pack("=BH", LOAD_FAST, idx))
 
+class Call(AExpression):
+    def __init__(self, method, *exprs):
+        self.method = method
+        self.exprs = exprs
+
+    def size(self, current, max_seen):
+        current, max_seen = self.method.size(current, max_seen)
+        for x in self.exprs:
+            current, max_seen = x.size(current, max_seen)
+
+        current -= len(self.exprs)
+
+        return current, max_seen
+
+    def emit(self, ctx):
+        self.method.emit(ctx)
+
+        for x in self.exprs:
+            x.emit(ctx)
+
+        ctx.stream.write(struct.pack("=BH", CALL_FUNCTION, len(self.exprs)))
+
 class Func(AExpression):
     def __init__(self, args, expr):
         for x in args:
@@ -262,16 +284,54 @@ class Func(AExpression):
 
     def emit(self, ctx):
         if self.value is None:
-            self.value = self.toFunc()
+            self.value = Const(self.toFunc())
 
-        if self not in ctx.consts:
-            ctx.consts[self] = len(ctx.consts)
+        self.value.emit(ctx)
 
-        idx = ctx.consts[self]
+class Compare(AExpression):
+    def __init__(self, expr1, expr2, op):
+        self.expr1 = expr1
+        self.expr2 = expr2
+        self.op = op
 
-        ctx.stream.write(struct.pack("=BH", LOAD_CONST, idx))
+    def size(self, current, max_seen):
+        current, max_seen = self.expr1.size(current, max_seen)
+        current, max_seen = self.expr2.size(current, max_seen)
 
+        return current - 1, max_seen
 
+    def emit(self, ctx):
+        self.expr1.emit(ctx)
+        self.expr2.emit(ctx)
+
+        ctx.stream.write(struct.pack("=BH", COMPARE_OP, self.op))
+
+compare_ops = ["Lesser",
+               "LesserOrEqual",
+               "Equal",
+               "NotEqual",
+               "Greater",
+               "GreaterOrEqual",
+               "In",
+               "NotIn",
+               "Is",
+               "IsNot",
+               "ExceptionMatch"]
+
+def _initCompareOps():
+    opcnt = 0
+    for x in compare_ops:
+        print x, opcnt
+
+        def init(self, expr1, expr2, op = opcnt):
+            Compare.__init__(self, expr1, expr2, op)
+
+        Tmp = types.ClassType(x, tuple([Compare]), {"__init__": init})
+
+        globals()[x] = Tmp
+        opcnt += 1
+
+_initCompareOps()
 
 class Argument(Local):
     def __init__(self, name):

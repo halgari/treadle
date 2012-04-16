@@ -1,5 +1,5 @@
 import unittest
-from treadle.treadle import Const, Return, AExpression, If, Add, Subtract, Do, Func, Argument, StoreLocal, Local
+from treadle.treadle import *
 from treadle.treadle_exceptions import *
 from treadle.macros import And
 
@@ -81,6 +81,51 @@ class StoreLocalTests(unittest.TestCase):
     def test_StoreLocal(self):
         a = Local("a")
         self.assertEqual(StoreLocal(a, Const(42)).toFunc()(), 42)
+#('<', '<=', '==', '!=', '>', '>=', 'in', 'not in', 'is', 'is not', 'exception match', 'BAD')
 
 
+compare_tests = {"Lesser": [[1, 2, True],
+                            [2, 1, False],
+                            [2, 2, False]],
+                 "LesserOrEqual": [[1, 2, True],
+                                   [2, 1, False],
+                                   [2, 2, True]],
+                 "Equal": [[1, 2, False],
+                     [2, 1, False],
+                     [2, 2, True]],
+                 "NotEqual": [[1, 2, True],
+                     [2, 1, True],
+                     [2, 2, False]],
+                 "Greater": [[1, 2, False],
+                     [2, 1, True],
+                     [2, 2, False]],
+                 "GreaterOrEqual": [[1, 2, False],
+                     [2, 1, True],
+                     [2, 2, True]],
+                 "In": [[1, [1, 2, 2], True],
+                     [2, [1], False],
+                     [2, [], False]],
+                 "NotIn": [[1, [1, 2, 2], False],
+                     [2, [1, 1], True],
+                     [2, [], True]],
+                 "Is": [[False, None, False],
+                     [False, False, True],
+                     [False, True, False]],
+                 "IsNot": [[False, None, True],
+                     [False, False, False],
+                     [False, True, True]],
+}
 
+class TestCompareOps(unittest.TestCase):
+    def test_Ops(self):
+        for k in compare_tests:
+            op = globals()[k]
+            for t in compare_tests[k]:
+                [v1, v2, result] = t
+                print k
+                self.assertEqual(op(Const(v1), Const(v2)).toFunc()(), result)
+
+class CallTests(unittest.TestCase):
+    def test_Call(self):
+        fun = Func([], Const(42))
+        self.assertEqual(Call(fun).toFunc()(), 42)
