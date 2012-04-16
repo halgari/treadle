@@ -23,12 +23,26 @@ class AExpression(object):
 
         expr = self
 
-        if not isinstance(self, Return):
-            expr = Return(self)
+        locals = {}
+        argcount = 0
+
+        if isinstance(self, Func):
+            expr = self.expr
+
+            for x in self.args:
+                locals[x] = len(locals)
+
+            argcount = len(self.args)
+
+
+        if not isinstance(expr, Return):
+            expr = Return(expr)
+
+
 
         size, max_seen = expr.size(0, 0)
 
-        ctx = Context()
+        ctx = Context(locals)
 
 
         expr.emit(ctx)
@@ -41,8 +55,15 @@ class AExpression(object):
         for k, v in list(ctx.consts.items()):
             consts[v + 1] = k.getConst()
         consts = tuple(consts)
+
+        varnames = [None] * (len(ctx.varnames))
+        for k, v in list(ctx.varnames.items()):
+            varnames[v] = k.name
+        varnames = tuple(varnames)
+
         print(repr(code))
-        c = newCode(co_code = code, co_stacksize = size, co_consts = consts)
+        c = newCode(co_code = code, co_stacksize = size, co_consts = consts, co_varnames = varnames,
+                    co_argcount = argcount)
         import dis
         dis.dis(c)
         return c
@@ -54,7 +75,7 @@ class AExpression(object):
 
 class IAssignable(object):
     """defines an expression that can be on the left side of an assign expression"""
-    pass
+
 
 class Return(AExpression):
     """defines an explicit 'return' in the code """
@@ -190,15 +211,61 @@ class Do(AExpression):
             if last is not x:
                 ctx.stream.write(struct.pack("=B", POP_TOP))
 
+class Local(AExpression, IAssignable):
+    def __init__(self, name):
+        self.name = name
+
+    def size(self, current, max_count):
+        current += 1
+        return current, max(current, max_count)
+
+    def emit(self, ctx):
+        if self not in ctx.varnames:
+            ctx.varnames[self] = len(self.varnames)
+
+        idx = ctx.varnames[self]
+
+        ctx.stream.write(struct.pack("=BH", LOAD_FAST, idx))
+
+class Func(AExpression):
+    def __init__(self, args, expr):
+        for x in args:
+            if not isinstance(x, Argument):
+                raise ArgumentExpressionRequiredException()
+        self.args = args
+        self.expr = expr
+        self.value = None
+
+    def size(self, current, max_seen):
+        current += 1
+        return current, max(max_seen, current)
+
+    def emit(self, ctx):
+        if self.value is None:
+            self.value = self.toFunc()
+
+        if self not in ctx.consts:
+            ctx.consts[self] = len(ctx.consts)
+
+        idx = ctx.consts[self]
+
+        ctx.stream.write(struct.pack("=BH", LOAD_CONST, idx))
+
+
+
+class Argument(Local):
+    def __init__(self, name):
+        Local.__init__(self, name)
 
 
 
 
 class Context(object):
     """defines a compilation context this keeps track of locals, output streams, etc"""
-    def __init__(self):
+    def __init__(self, varnames = {}):
         self.stream = BytesIO()
         self.consts = {}
+        self.varnames = varnames
 
 
 

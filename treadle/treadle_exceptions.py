@@ -9,3 +9,6 @@ class ExpressionNotAllowedException(Exception):
 
 class ExpressionRequiredException(Exception):
     pass
+
+class ArgumentExpressionRequiredException(Exception):
+    pass
