@@ -362,7 +362,7 @@ class Dict(AExpression):
         return current, max_seen
         
     def emit(self, ctx):
-        ctx.stream.write(struct.pack("=BH", BUILD_MAP, len(self.exprs) / 2))
+        ctx.stream.write(struct.pack("=BH", BUILD_MAP, int(len(self.exprs) / 2)))
         
         for i in range(0, len(self.exprs), 2):
             self.exprs[i+1].emit(ctx)  # Key is popped first, so push value first
