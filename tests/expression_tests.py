@@ -81,7 +81,6 @@ class StoreLocalTests(unittest.TestCase):
     def test_StoreLocal(self):
         a = Local("a")
         self.assertEqual(StoreLocal(a, Const(42)).toFunc()(), 42)
-#('<', '<=', '==', '!=', '>', '>=', 'in', 'not in', 'is', 'is not', 'exception match', 'BAD')
 
 
 compare_tests = {"Lesser": [[1, 2, True],
@@ -122,10 +121,28 @@ class TestCompareOps(unittest.TestCase):
             op = globals()[k]
             for t in compare_tests[k]:
                 [v1, v2, result] = t
-                print k
                 self.assertEqual(op(Const(v1), Const(v2)).toFunc()(), result)
 
 class CallTests(unittest.TestCase):
     def test_Call(self):
         fun = Func([], Const(42))
         self.assertEqual(Call(fun).toFunc()(), 42)
+
+def pr(itm):
+    print itm
+    return itm
+
+class RecurTests(unittest.TestCase):
+    def test_Recur(self):
+        accum = Argument("accum")
+
+        f = Func([accum],
+                If(NotEqual(accum, Const(10)),
+                Recur(Add(accum, Const(1))),
+                accum))
+
+        #import dis
+        #dis.dis(f.toFunc())
+        c = f.toFunc()
+        print "foo"
+        c(1)

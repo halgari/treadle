@@ -5,6 +5,8 @@ import struct
 from .treadle_exceptions import *
 from .compat import version, newCode, SEEK_END, CondJump, AbsoluteJump
 
+from copy import copy
+
 from io import BytesIO
 
 
@@ -42,7 +44,11 @@ class AExpression(object):
 
         size, max_seen = expr.size(0, 0)
 
-        ctx = Context(locals)
+        recurlocals = range(len(locals))
+        recurlocals.reverse()
+
+        rp = RecurPoint(0, recurlocals, None)
+        ctx = Context(rp, locals)
 
 
         expr.emit(ctx)
@@ -61,11 +67,13 @@ class AExpression(object):
             varnames[v] = k.name
         varnames = tuple(varnames)
 
-        print(repr(code))
-        c = newCode(co_code = code, co_stacksize = size, co_consts = consts, co_varnames = varnames,
-                    co_argcount = argcount)
+        print varnames, size
+        #size += 1
+        c = newCode(co_code = code, co_stacksize = max_seen, co_consts = consts, co_varnames = varnames,
+                    co_argcount = argcount, co_nlocals = len(varnames))
         import dis
         dis.dis(c)
+        print "---"
         return c
 
     def toFunc(self):
@@ -288,6 +296,32 @@ class Func(AExpression):
 
         self.value.emit(ctx)
 
+class Recur(AExpression):
+    def __init__(self, *args):
+        self.args = args
+
+    def size(self, current, max_seen):
+
+        for x in self.args:
+            current, max_seen = x.size(current, max_seen)
+
+        return current - len(self.args), max_seen
+
+    def emit(self, ctx):
+
+        for x in self.args:
+            x.emit(ctx)
+
+        for x in ctx.recurPoint.args:
+            ctx.stream.write(struct.pack("=BH", STORE_FAST, x))
+
+        ctx.stream.write(struct.pack("=BH", JUMP_ABSOLUTE, ctx.recurPoint.offset))
+
+
+
+
+
+
 class Compare(AExpression):
     def __init__(self, expr1, expr2, op):
         self.expr1 = expr1
@@ -321,8 +355,6 @@ compare_ops = ["Lesser",
 def _initCompareOps():
     opcnt = 0
     for x in compare_ops:
-        print x, opcnt
-
         def init(self, expr1, expr2, op = opcnt):
             Compare.__init__(self, expr1, expr2, op)
 
@@ -338,14 +370,22 @@ class Argument(Local):
         Local.__init__(self, name)
 
 
+class RecurPoint(object):
+    def __init__(self, offset, args, next):
+        self.next = next
+        self.args = args
+        self.offset = 0
+
 
 
 class Context(object):
     """defines a compilation context this keeps track of locals, output streams, etc"""
-    def __init__(self, varnames = {}):
+    def __init__(self, recurPoint, varnames = {}):
         self.stream = BytesIO()
         self.consts = {}
         self.varnames = varnames
+        self.recurPoint = recurPoint
+
 
 
 
