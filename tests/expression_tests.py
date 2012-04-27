@@ -159,6 +159,14 @@ class ListTests(unittest.TestCase):
 
         self.assertEqual(tp, [1, 2])
         self.assertEqual(type(tp), list)
+        
+        
+class DictTests(unittest.TestCase):
+    def test_Dict(self):
+        tp = Dict(Const(1), Const(2), Const(3), Const(4)).toFunc()()
+
+        self.assertEqual(tp, {1:2, 3: 4})
+        self.assertEqual(type(tp), dict)        
 
 
 class T(object):
