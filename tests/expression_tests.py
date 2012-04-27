@@ -129,7 +129,7 @@ class CallTests(unittest.TestCase):
         self.assertEqual(Call(fun).toFunc()(), 42)
 
 def pr(itm):
-    print itm
+    print(itm)
     return itm
 
 class RecurTests(unittest.TestCase):
@@ -144,5 +144,4 @@ class RecurTests(unittest.TestCase):
         #import dis
         #dis.dis(f.toFunc())
         c = f.toFunc()
-        print "foo"
-        c(1)
+        self.assertEqual(c(1), 10)
