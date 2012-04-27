@@ -145,3 +145,15 @@ class RecurTests(unittest.TestCase):
         #dis.dis(f.toFunc())
         c = f.toFunc()
         self.assertEqual(c(1), 10)
+
+class TupleTests(unittest.TestCase):
+    def test_Tuple(self):
+        tp = Tuple(Const(1), Const(2)).toFunc()()
+
+        self.assertTupleEqual(tp, (1, 2))
+
+class ListTests(unittest.TestCase):
+    def test_List(self):
+        tp = List(Const(1), Const(2)).toFunc()()
+
+        self.assertListEqual(tp, [1, 2])

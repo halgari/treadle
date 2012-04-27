@@ -16,6 +16,7 @@ for x in dis.opmap:
 
 
 
+
 class AExpression(object):
     """defines a abstract expression subclass this to create new expressions"""
     def __init__(self):
@@ -77,6 +78,10 @@ class AExpression(object):
         c = self.toCode()
         return types.FunctionType(c, {})
 
+def assertAllExpressions(exprs):
+    for x in exprs:
+        if not isinstance(x, AExpression):
+            raise ExpressionRequiredException();
 
 class IAssignable(object):
     """defines an expression that can be on the left side of an assign expression"""
@@ -315,8 +320,32 @@ class Recur(AExpression):
         ctx.stream.write(struct.pack("=BH", JUMP_ABSOLUTE, ctx.recurPoint.offset))
 
 
+class AbstractBuilder(AExpression):
+    """An expression that creates a tuple from the arguments"""
+    def __init__(self, buildbc, exprs):
+        self.buildbc = buildbc
+        assertAllExpressions(exprs)
+        self.exprs = exprs
 
+    def size(self, current, max_seen):
+        for x in self.exprs:
+            current, max_seen = x.size(current, max_seen)
+        current -= len(self.exprs)
+        current += 1
+        return current, max_seen
 
+    def emit(self, ctx):
+        for x in self.exprs:
+            x.emit(ctx)
+        ctx.stream.write(struct.pack("=BH", self.buildbc, len(self.exprs)))
+
+class Tuple(AbstractBuilder):
+    def __init__(self, *exprs):
+        AbstractBuilder.__init__(self, BUILD_TUPLE, exprs)
+
+class List(AbstractBuilder):
+    def __init__(self, *exprs):
+        AbstractBuilder.__init__(self, BUILD_LIST, exprs)
 
 
 class Compare(AExpression):
