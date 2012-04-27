@@ -44,8 +44,7 @@ class AExpression(object):
 
         size, max_seen = expr.size(0, 0)
 
-        recurlocals = range(len(locals))
-        recurlocals.reverse()
+        recurlocals = reversed(range(len(locals)))
 
         rp = RecurPoint(0, recurlocals, None)
         ctx = Context(rp, locals)
@@ -67,13 +66,11 @@ class AExpression(object):
             varnames[v] = k.name
         varnames = tuple(varnames)
 
-        print varnames, size
-        #size += 1
         c = newCode(co_code = code, co_stacksize = max_seen, co_consts = consts, co_varnames = varnames,
                     co_argcount = argcount, co_nlocals = len(varnames))
         import dis
         dis.dis(c)
-        print "---"
+        print("---")
         return c
 
     def toFunc(self):
@@ -358,7 +355,7 @@ def _initCompareOps():
         def init(self, expr1, expr2, op = opcnt):
             Compare.__init__(self, expr1, expr2, op)
 
-        Tmp = types.ClassType(x, tuple([Compare]), {"__init__": init})
+        Tmp = type(x, tuple([Compare]), {"__init__": init})
 
         globals()[x] = Tmp
         opcnt += 1

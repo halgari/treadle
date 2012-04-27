@@ -20,5 +20,5 @@ dis.dis(z)
 import sys
 sys.stdout.flush()
 sys.stderr.flush()
-print z(1)
+print(z(1))
 
