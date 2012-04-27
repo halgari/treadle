@@ -4,21 +4,15 @@
 #unittest.main()
 from treadle.treadle import *
 
-def foo(a):
-  while a != 10:
-    a = a + 1
-  return a
 
-dis.dis(foo)
+class T(object):
+    def foo(self):
+        return 42
 
-accum = Argument("a")
-f = Func([accum],
-If(NotEqual(accum, Const(10)), Recur(Add(accum, Const(1))), accum))
-
-z = f.toFunc()
+z = Call(Attr(Const(T()), "foo")).toFunc()
 dis.dis(z)
 import sys
 sys.stdout.flush()
 sys.stderr.flush()
-print(z(1))
+print(z())
 

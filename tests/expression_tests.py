@@ -150,10 +150,24 @@ class TupleTests(unittest.TestCase):
     def test_Tuple(self):
         tp = Tuple(Const(1), Const(2)).toFunc()()
 
-        self.assertTupleEqual(tp, (1, 2))
+        self.assertEqual(tp, (1, 2))
+        self.assertEqual(type(tp), tuple)
 
 class ListTests(unittest.TestCase):
     def test_List(self):
         tp = List(Const(1), Const(2)).toFunc()()
 
-        self.assertListEqual(tp, [1, 2])
+        self.assertEqual(tp, [1, 2])
+        self.assertEqual(type(tp), list)
+
+
+class T(object):
+    def foo(self):
+        return 42
+
+class AttrTests(unittest.TestCase):
+    def test_List(self):
+        num = Call(Attr(Const(T()), "foo")).toFunc()()
+
+        self.assertEqual(num, 42)
+

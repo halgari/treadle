@@ -67,8 +67,13 @@ class AExpression(object):
             varnames[v] = k.name
         varnames = tuple(varnames)
 
+        names = [None] * (len(ctx.names))
+        for k, v in list(ctx.names.items()):
+            names[v] = k
+        names = tuple(names)
+
         c = newCode(co_code = code, co_stacksize = max_seen, co_consts = consts, co_varnames = varnames,
-                    co_argcount = argcount, co_nlocals = len(varnames))
+                    co_argcount = argcount, co_nlocals = len(varnames), co_names = names)
         import dis
         dis.dis(c)
         print("---")
@@ -347,6 +352,25 @@ class List(AbstractBuilder):
     def __init__(self, *exprs):
         AbstractBuilder.__init__(self, BUILD_LIST, exprs)
 
+class Attr(AExpression):
+    """Generates a getattr bytecode"""
+    def __init__(self, src, name):
+        self.src = src
+        self.name = name
+
+    def size(self, current, max_seen):
+        current, max_seen = self.src.size(current, max_seen)
+        return current, max_seen
+
+    def emit(self, ctx):
+
+        if self.name not in ctx.names:
+            ctx.names[self.name] = len(ctx.names)
+
+        idx = ctx.names[self.name]
+        self.src.emit(ctx)
+        ctx.stream.write(struct.pack("=BH", LOAD_ATTR, idx))
+
 
 class Compare(AExpression):
     def __init__(self, expr1, expr2, op):
@@ -411,6 +435,7 @@ class Context(object):
         self.consts = {}
         self.varnames = varnames
         self.recurPoint = recurPoint
+        self.names = {}
 
 
 
