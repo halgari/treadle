@@ -3,16 +3,16 @@
 
 #unittest.main()
 from treadle.treadle import *
-
-
-class T(object):
-    def foo(self):
-        return 42
-
-z = Call(Attr(Const(T()), "foo")).toFunc()
-dis.dis(z)
 import sys
-sys.stdout.flush()
-sys.stderr.flush()
-print(z())
 
+
+r = None
+def Foo():
+    r = 2
+    return r
+
+fb = Finally(Const(1), Call(Const(Foo))).toFunc()
+import dis
+#dis.dis(fb)
+sys.stdout.flush()
+print fb()

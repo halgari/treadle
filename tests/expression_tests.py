@@ -171,3 +171,26 @@ class AttrTests(unittest.TestCase):
 
         self.assertEqual(num, 42)
 
+
+class RaiseTests(unittest.TestCase):
+    def test_Raise(self):
+        r = Raise(Call(Const(Exception))).toFunc()
+
+        self.assertRaises(Exception, r)
+
+r = None
+
+class FinallyTests(unittest.TestCase):
+    def test_Finally(self):
+        global r
+        r = None
+        def Foo():
+            global r
+            r = 2
+            return r
+
+        fb = Finally(Const(1), Call(Const(Foo))).toFunc()
+
+        self.assertEquals(r, None)
+        self.assertEquals(fb(), 1)
+        self.assertEquals(r, 2)

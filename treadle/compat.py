@@ -23,15 +23,16 @@ class _Cond_Jump26(object):
 
 
 class AbsoluteJump(object):
-    def __init__(self, ctx):
+    def __init__(self, ctx, bc = JUMP_ABSOLUTE):
+        self.bc = bc
         self.loc = ctx.stream.tell()
         self.ctx = ctx
-        ctx.stream.write(struct.pack("=BH", JUMP_ABSOLUTE, 0xFFFF))
+        ctx.stream.write(struct.pack("=BH", self.bc, 0xFFFF))
 
     def mark(self):
         self.jumpto = self.ctx.stream.tell()
         self.ctx.stream.seek(self.loc)
-        self.ctx.stream.write(struct.pack("=BH", JUMP_ABSOLUTE, self.jumpto))
+        self.ctx.stream.write(struct.pack("=BH", self.bc, self.jumpto))
 
         self.ctx.stream.seek(0, SEEK_END)
 

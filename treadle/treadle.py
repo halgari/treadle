@@ -390,6 +390,46 @@ class Compare(AExpression):
 
         ctx.stream.write(struct.pack("=BH", COMPARE_OP, self.op))
 
+class Raise(AExpression):
+    def __init__(self, expr):
+        assertAllExpressions([expr])
+        self.expr = expr
+
+    def size(self, current, max_size):
+        current, max_size = self.expr.size(current, max_size)
+
+        return current, max_size
+
+    def emit(self, ctx):
+        self.expr.emit(ctx)
+
+        ctx.stream.write(struct.pack("=BH", RAISE_VARARGS, 1))
+
+class Finally(AExpression):
+    def __init__(self, body, final):
+        assertAllExpressions([body, final])
+        self.body = body
+        self.final = final
+
+    def size(self, current, max_size):
+        current, max_size = self.body.size(current, max_size)
+        _, max_size = self.body.size(current, max_size)
+
+        return current, max_size
+
+    def emit(self, ctx):
+        jmp = AbsoluteJump(ctx, SETUP_FINALLY)
+        self.body.emit(ctx)
+        endjmp = AbsoluteJump(ctx)
+        ctx.stream.write(struct.pack("=B", POP_BLOCK))
+        jmp.mark()
+        ctx.stream.write(struct.pack("=BH", LOAD_CONST, 0))
+        self.final.emit(ctx)
+        ctx.stream.write(struct.pack("=BB", POP_TOP, END_FINALLY))
+        endjmp.mark()
+
+
+
 compare_ops = ["Lesser",
                "LesserOrEqual",
                "Equal",
