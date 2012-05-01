@@ -343,6 +343,34 @@ class AbstractBuilder(AExpression):
         for x in self.exprs:
             x.emit(ctx)
         ctx.stream.write(struct.pack("=BH", self.buildbc, len(self.exprs)))
+        
+class Dict(AExpression):
+    """Builds a dict from the given expressions"""
+    def __init__(self, *exprs):
+        assertAllExpressions(exprs)
+        self.exprs = exprs
+    
+    def size(self, current, max_seen):
+        current += 1
+        max_seen = max(current, max_seen)
+        
+        for i in range(0, len(self.exprs), 2):
+            current, max_seen = self.exprs[i+1].size(current, max_seen)
+            current, max_seen = self.exprs[i].size(current, max_seen)
+            current -= 2
+        
+        return current, max_seen
+        
+    def emit(self, ctx):
+        ctx.stream.write(struct.pack("=BH", BUILD_MAP, int(len(self.exprs) / 2)))
+        
+        for i in range(0, len(self.exprs), 2):
+            self.exprs[i+1].emit(ctx)  # Key is popped first, so push value first
+            self.exprs[i].emit(ctx)
+            ctx.stream.write(struct.pack("=B", STORE_MAP))
+        
+        
+            
 
 class Tuple(AbstractBuilder):
     def __init__(self, *exprs):
@@ -389,6 +417,7 @@ class Compare(AExpression):
         self.expr2.emit(ctx)
 
         ctx.stream.write(struct.pack("=BH", COMPARE_OP, self.op))
+        
 
 class Raise(AExpression):
     def __init__(self, expr):
