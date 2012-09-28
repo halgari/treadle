@@ -17,18 +17,23 @@ for x in dis.opmap:
 
 
 
+
 class AExpression(object):
     """defines a abstract expression subclass this to create new expressions"""
     def __init__(self):
         pass
 
-    def toCode(self):
-
+    def toCode(self, name = "", filename = "<string>"):
+        print "----"
         expr = self
 
         locals = {}
         argcount = 0
 
+        print repr(self)
+
+
+        co_flags = 0
         if isinstance(self, Func):
             expr = self.expr
 
@@ -36,6 +41,10 @@ class AExpression(object):
                 locals[x] = len(locals)
 
             argcount = len(self.args)
+            co_flags = self.flags
+
+            if co_flags & CO_VARARGS:
+                argcount -= 1  # VARARGS don't count as args...strange
 
 
         if not isinstance(expr, Return):
@@ -48,14 +57,14 @@ class AExpression(object):
         recurlocals = reversed(range(len(locals)))
 
         rp = RecurPoint(0, recurlocals, None)
-        ctx = Context(rp, locals)
+        ctx = Context(rp, locals, filename = filename)
 
 
         expr.emit(ctx)
 
         code = ctx.stream.getvalue()
         if size != 0:
-            raise UnbalancedStackException("Unbalanced stack")
+            raise UnbalancedStackException("Unbalanced stack " + str(size))
 
         consts = [None] * (len(ctx.consts) + 1)
         for k, v in list(ctx.consts.items()):
@@ -72,21 +81,82 @@ class AExpression(object):
             names[v] = k
         names = tuple(names)
 
+
+
+        freevars = []
+        idx = len(ctx.freevars)
+        for x in ctx.freevars:
+            x.markIdx(idx, ctx)
+            freevars.append(x.name)
+        freevars = tuple(freevars)
+
+
+        if freevars or ctx.cellvars:
+            co_flags ^= CO_NOFREE
+        print freevars, "freevars", ctx.cellvars, "cellvars"
         c = newCode(co_code = code, co_stacksize = max_seen, co_consts = consts, co_varnames = varnames,
-                    co_argcount = argcount, co_nlocals = len(varnames), co_names = names)
+                    co_argcount = argcount, co_nlocals = len(varnames), co_names = names, co_flags = co_flags,
+                    co_freevars = freevars, co_cellvars = tuple(ctx.cellvars), filename = filename, name = name)
         import dis
         dis.dis(c)
         print("---")
         return c
 
-    def toFunc(self):
-        c = self.toCode()
-        return types.FunctionType(c, {})
+    def setLineNo(self, lineno):
+        self._lineno = lineno
+
+    def toFunc(self, globals = None, filename = "<string>"):
+        if globals is None:
+            globals = {}
+        c = self.toCode(filename)
+        return types.FunctionType(c, globals)
+
+    def __getattr__(self, name):
+        """Map in every class in this module as a constructor so we can provide
+        it as a fluent interface"""
+        if name not in globals():
+            raise AttributeError("Can't find " + name + " on " + str(self))
+
+        c = globals()[name]
+
+        if type(c) != type:
+            raise AttributeError("Can't find " + name + " on " + str(self))
+
+        def consFunc(*args):
+            return c(self, *args)
+
+        return consFunc
+
+    def __iter__(self):
+        raise StopIteration()
+
+    def emit(self, ctx):
+        if hasattr(self, "_lineno"):
+            ctx.emitLineNo(self._lineno)
+        return self._emit(ctx)
+
+
+
+
+def markupClosures(ctx, expr):
+    closures = filter(lambda x: isinstance(x, Closure), flatten(iter, expr))
+    cellvars = sorted(filter(lambda x:  isinstance(x, Closure), closures))
+    freevars = []
+
+    closures = list(cellvars + freevars)
+
+    for idx in range(len(closures)):
+        closures[idx].markIdx(idx)
+
+    return closures
+
+def assertExpression(expr):
+    if not isinstance(expr, AExpression):
+        raise ExpressionRequiredException("Expected AExpression, got " + str(type(expr)));
 
 def assertAllExpressions(exprs):
     for x in exprs:
-        if not isinstance(x, AExpression):
-            raise ExpressionRequiredException();
+        assertExpression(x)
 
 class IAssignable(object):
     """defines an expression that can be on the left side of an assign expression"""
@@ -100,7 +170,7 @@ class Return(AExpression):
 
         self.expr = expr
 
-    def emit(self, ctx):
+    def _emit(self, ctx):
         self.expr.emit(ctx)
 
         data = struct.pack("=B", RETURN_VALUE)
@@ -110,16 +180,26 @@ class Return(AExpression):
         current, max_seen = self.expr.size(current, max_seen)
         return current - 1, max_seen
 
+    def __repr__(self):
+        return "Return(" + repr(self.expr) + ")"
+
+    def __iter__(self):
+        yield self.expr
+
+valid_const_types = {str, int, float, bool, type(None), type(type), types.CodeType, unicode}
+
 class Const(AExpression):
     """defines a constant that will generate a LOAD_CONST bytecode. Note: Const objects
        do no intern their constants, that is left to the language implementors"""
     def __init__(self, const):
         if isinstance(const, AExpression):
             raise ExpressionNotAllowedException()
+        if type(const) not in valid_const_types:
+            raise Exception("Only marshallable types allowed as Consts, got: " + str(const) + str(type(const)))
 
         self.value = const
 
-    def emit(self, ctx):
+    def _emit(self, ctx):
         # find a location for the const
         if self not in ctx.consts:
             ctx.consts[self] = len(ctx.consts)
@@ -135,8 +215,16 @@ class Const(AExpression):
         current += 1
         return current, max(current, max_seen)
 
+    def __repr__(self):
+        return "Const(" + repr(self.value) + ": " + repr(type(self.value).__name__) + ")"
+
+    def __iter__(self):
+        raise StopIteration()
+
 class StoreLocal(AExpression):
     def __init__(self, local, expr):
+        assertAllExpressions([local, expr])
+
         self.local = local
         self.expr = expr
     def size(self, current, max_seen):
@@ -144,7 +232,7 @@ class StoreLocal(AExpression):
 
         return current, max(max_seen, current + 1)
 
-    def emit(self, ctx):
+    def _emit(self, ctx):
         if self.local not in ctx.varnames:
             ctx.varnames[self.local] = len(ctx.varnames)
 
@@ -153,6 +241,10 @@ class StoreLocal(AExpression):
         self.expr.emit(ctx)
 
         ctx.stream.write(struct.pack("=BBH", DUP_TOP, STORE_FAST, idx))
+
+    def __iter__(self):
+        yield self.local
+        yield self.expr
 
 
 class If(AExpression):
@@ -177,7 +269,7 @@ class If(AExpression):
 
         return current + 1, max_seen
 
-    def emit(self, ctx):
+    def _emit(self, ctx):
         self.condition.emit(ctx)
 
         elsejump = CondJump(ctx)
@@ -194,6 +286,15 @@ class If(AExpression):
 
         endofif.mark()
 
+    def __iter__(self):
+        yield self.condition
+        yield self.thenexpr
+        yield self.elseexpr
+
+    def __repr__(self):
+        return "(If " + " ".join(map(repr, [self.condition, self.thenexpr, \
+                                                self.elseexpr])) + " )"
+
 
 class ABinaryOp(AExpression):
     def __init__(self, a, b, op):
@@ -207,10 +308,28 @@ class ABinaryOp(AExpression):
 
         return current - 1, max_seen
 
-    def emit(self, ctx):
+    def _emit(self, ctx):
         self.a.emit(ctx)
         self.b.emit(ctx)
         ctx.stream.write(struct.pack("=B", self.op))
+
+    def __iter__(self):
+        yield self.a
+        yield self.b
+
+
+
+class Slice1(ABinaryOp):
+    def __init__(self, a, b):
+        ABinaryOp.__init__(self, a, b, globals()["SLICE+1"])
+
+class Subscript(ABinaryOp):
+    def __init__(self, a, b):
+        ABinaryOp.__init__(self, a, b, BINARY_SUBSCR)
+
+class And(ABinaryOp):
+    def __init__(self, a, b):
+        ABinaryOp.__init__(self, a, b, BINARY_AND)
 
 class Add(ABinaryOp):
     def __init__(self, a, b):
@@ -239,14 +358,91 @@ class Do(AExpression):
 
         return current, max_seen
 
-    def emit(self, ctx):
+    def _emit(self, ctx):
         last = self.exprs[-1]
         for x in self.exprs:
             x.emit(ctx)
             if last is not x:
                 ctx.stream.write(struct.pack("=B", POP_TOP))
 
+    def __repr__(self):
+        return "Do(" + ", ".join(map(repr, self.exprs)) + ")"
+
+    def __iter__(self):
+        for x in self.exprs:
+            yield x
+
 class Local(AExpression, IAssignable):
+    def __init__(self, name):
+        assert isinstance(name, (str, unicode))
+        self.name = name
+
+    def size(self, current, max_count):
+        current += 1
+        return current, max(current, max_count)
+
+    def _emit(self, ctx):
+        if self not in ctx.varnames:
+            ctx.varnames[self] = len(ctx.varnames)
+
+        idx = ctx.varnames[self]
+
+        ctx.stream.write(struct.pack("=BH", LOAD_FAST, idx))
+
+    def __repr__(self):
+        return self.name
+
+    def __iter__(self):
+        raise StopIteration()
+
+class Closure(Local, IAssignable):
+    def __init__(self, name, src):
+        assertExpression(src)
+        self.name = name
+        self.src = src
+        self.locs = []
+
+    def markIdx(self, idx, ctx):
+        for x in self.locs:
+            ctx.stream.seek(x)
+            ctx.stream.write(struct.pack("=BH", LOAD_DEREF, idx))
+        ctx.stream.seek(0, SEEK_END)
+
+
+
+    def _emit(self, ctx):
+        self.locs.append(ctx.stream.tell())
+        ctx.stream.write(struct.pack("=BH", LOAD_DEREF, 0))
+        ctx.freevars[self] = self
+
+
+    def emitPreamble(self, ctx):
+        self.src.emit(ctx)
+
+    def __repr__(self):
+        return "Closure(" + repr(self.src) + ", " + self.name + ")"
+
+class Global(AExpression):
+    def __init__(self, name):
+        assert isinstance(name, str)
+        self.name = name
+
+    def size(self, current, max_count):
+        current += 1
+        return current, max(current, max_count)
+
+    def _emit(self, ctx):
+        if self.name not in ctx.names:
+            ctx.names[self.name] = len(ctx.names)
+
+        idx = ctx.names[self.name]
+
+        ctx.stream.write(struct.pack("=BH", LOAD_GLOBAL, idx))
+
+    def __repr__(self):
+        return "Global(" + self.name+")"
+
+class Import(AExpression):
     def __init__(self, name):
         self.name = name
 
@@ -254,18 +450,23 @@ class Local(AExpression, IAssignable):
         current += 1
         return current, max(current, max_count)
 
-    def emit(self, ctx):
-        if self not in ctx.varnames:
-            ctx.varnames[self] = len(self.varnames)
+    def _emit(self, ctx):
+        if self.name not in ctx.names:
+            ctx.names[self.name] = len(ctx.names)
 
-        idx = ctx.varnames[self]
+        idx = ctx.names[self.name]
 
-        ctx.stream.write(struct.pack("=BH", LOAD_FAST, idx))
+        ctx.stream.write(struct.pack("=BH", IMPORT_NAME, idx))
+
+    def __repr__(self):
+        return "Import(" + self.name+")"
 
 class Call(AExpression):
     def __init__(self, method, *exprs):
         self.method = method
         self.exprs = exprs
+        assertExpression(self.method)
+        assertAllExpressions(self.exprs)
 
     def size(self, current, max_seen):
         current, max_seen = self.method.size(current, max_seen)
@@ -276,7 +477,7 @@ class Call(AExpression):
 
         return current, max_seen
 
-    def emit(self, ctx):
+    def _emit(self, ctx):
         self.method.emit(ctx)
 
         for x in self.exprs:
@@ -284,11 +485,30 @@ class Call(AExpression):
 
         ctx.stream.write(struct.pack("=BH", CALL_FUNCTION, len(self.exprs)))
 
+    def __repr__(self):
+        return "(" + repr(self.method) + " " + " ".join(map(repr, self.exprs)) + ")"
+
+    def __iter__(self):
+        yield self.method
+        for x in self.exprs:
+            yield x
+
 class Func(AExpression):
-    def __init__(self, args, expr):
+    def __init__(self, args, expr, resolver = None, name = ""):
+        self.name = name
+        if resolver == None:
+            resolver = lambda x: None
+        self.resolver = resolver
+
         for x in args:
             if not isinstance(x, Argument):
                 raise ArgumentExpressionRequiredException()
+
+        self.flags = 67
+
+        if len(args) and isinstance(args[-1], RestArgument):
+            self.flags |= CO_VARARGS
+
         self.args = args
         self.expr = expr
         self.value = None
@@ -297,11 +517,78 @@ class Func(AExpression):
         current += 1
         return current, max(max_seen, current)
 
-    def emit(self, ctx):
+    def freeze(self, name, filename):
         if self.value is None:
-            self.value = Const(self.toFunc())
+            self.code = self.toCode(self.name, filename)
+            self.value = Const(self.code)
 
-        self.value.emit(ctx)
+            self.freeVars = self.code.co_freevars
+
+
+    def _emit(self, ctx):
+        self.freeze(self.name, ctx.filename)
+
+        if self.freeVars:
+            for x in self.freeVars:
+                idx = len(ctx.cellvars)
+                ctx.cellvars.append(x)
+                resolved = self.resolver(x)
+                assert resolved
+
+                resolved.emitPreamble(ctx)
+                ctx.stream.write(struct.pack("=BHBH", STORE_DEREF, idx, LOAD_CLOSURE, idx))
+
+            ctx.stream.write(struct.pack("=BH", BUILD_TUPLE, len(self.freeVars)))
+            self.value.emit(ctx)
+            ctx.stream.write(struct.pack("=BH", MAKE_CLOSURE, 0))
+        else:
+            self.value.emit(ctx)
+            ctx.stream.write(struct.pack("=BH", MAKE_FUNCTION, 0))
+
+    def __repr__(self):
+        return "Func(" + repr(map(repr, self.args)) + " -> " + repr(self.expr) + " | " + repr(self.flags) + ")"
+
+    def __iter__(self):
+        yield self.expr
+
+class Loop(AExpression):
+    def __init__(self, body, vars, args):
+        assertAllExpressions([body] + vars + args)
+        self.vars = vars
+        self.args = args
+        self.body = body
+        self.inits = []
+        assert len(vars) == len(args)
+
+        for x in range(len(self.vars)):
+            self.inits.append(self.vars[x].StoreLocal(self.args[x]))
+
+        self.inits = Do(*self.inits)
+
+
+    def size(self, current, max_seen):
+        current, max_seen = Do(self.inits, self.body).size(current, max_seen)
+        return current, max_seen
+
+    def _emit(self, ctx):
+        map(lambda x: x.emit(ctx), self.inits)
+
+        argints = map(lambda x: ctx.varnames[x], self.vars)
+        ctx.stream.write(struct.pack("=B", POP_TOP))
+
+        ctx.pushRecurPoint(argints)
+
+        self.body.emit(ctx)
+
+        ctx.popRecurPoint()
+
+    def __repr__(self):
+        return "Loop([" + ", ".join(map(repr, self.vars)) + "] [" \
+                    + ", ".join(map(repr, self.args)) + " ]" + \
+                     repr(self.body)
+
+
+
 
 class Recur(AExpression):
     def __init__(self, *args):
@@ -312,9 +599,9 @@ class Recur(AExpression):
         for x in self.args:
             current, max_seen = x.size(current, max_seen)
 
-        return current - len(self.args), max_seen
+        return current - len(self.args) + 1, max_seen
 
-    def emit(self, ctx):
+    def _emit(self, ctx):
 
         for x in self.args:
             x.emit(ctx)
@@ -323,6 +610,10 @@ class Recur(AExpression):
             ctx.stream.write(struct.pack("=BH", STORE_FAST, x))
 
         ctx.stream.write(struct.pack("=BH", JUMP_ABSOLUTE, ctx.recurPoint.offset))
+
+    def __iter__(self):
+        for x in args:
+            yield x
 
 
 class AbstractBuilder(AExpression):
@@ -339,38 +630,42 @@ class AbstractBuilder(AExpression):
         current += 1
         return current, max_seen
 
-    def emit(self, ctx):
+    def _emit(self, ctx):
         for x in self.exprs:
             x.emit(ctx)
         ctx.stream.write(struct.pack("=BH", self.buildbc, len(self.exprs)))
-        
+
+    def __iter__(self):
+        for x in self.exprs:
+            yield x
+
 class Dict(AExpression):
     """Builds a dict from the given expressions"""
     def __init__(self, *exprs):
         assertAllExpressions(exprs)
         self.exprs = exprs
-    
+
     def size(self, current, max_seen):
         current += 1
         max_seen = max(current, max_seen)
-        
+
         for i in range(0, len(self.exprs), 2):
             current, max_seen = self.exprs[i+1].size(current, max_seen)
             current, max_seen = self.exprs[i].size(current, max_seen)
             current -= 2
-        
+
         return current, max_seen
-        
-    def emit(self, ctx):
+
+    def _emit(self, ctx):
         ctx.stream.write(struct.pack("=BH", BUILD_MAP, int(len(self.exprs) / 2)))
-        
+
         for i in range(0, len(self.exprs), 2):
             self.exprs[i+1].emit(ctx)  # Key is popped first, so push value first
             self.exprs[i].emit(ctx)
             ctx.stream.write(struct.pack("=B", STORE_MAP))
-        
-        
-            
+
+
+
 
 class Tuple(AbstractBuilder):
     def __init__(self, *exprs):
@@ -390,7 +685,7 @@ class Attr(AExpression):
         current, max_seen = self.src.size(current, max_seen)
         return current, max_seen
 
-    def emit(self, ctx):
+    def _emit(self, ctx):
 
         if self.name not in ctx.names:
             ctx.names[self.name] = len(ctx.names)
@@ -399,9 +694,16 @@ class Attr(AExpression):
         self.src.emit(ctx)
         ctx.stream.write(struct.pack("=BH", LOAD_ATTR, idx))
 
+    def __repr__(self):
+        return "(." + self.name + " " + repr(self.src) + ")"
+
+    def __iter__(self):
+        yield self.src
+
 
 class Compare(AExpression):
     def __init__(self, expr1, expr2, op):
+        assertAllExpressions([expr1, expr2])
         self.expr1 = expr1
         self.expr2 = expr2
         self.op = op
@@ -412,12 +714,16 @@ class Compare(AExpression):
 
         return current - 1, max_seen
 
-    def emit(self, ctx):
+    def _emit(self, ctx):
         self.expr1.emit(ctx)
         self.expr2.emit(ctx)
 
         ctx.stream.write(struct.pack("=BH", COMPARE_OP, self.op))
-        
+
+    def __iter__(self):
+        yield self.expr1
+        yield self.expr2
+
 
 class Raise(AExpression):
     def __init__(self, expr):
@@ -429,10 +735,13 @@ class Raise(AExpression):
 
         return current, max_size
 
-    def emit(self, ctx):
+    def _emit(self, ctx):
         self.expr.emit(ctx)
 
         ctx.stream.write(struct.pack("=BH", RAISE_VARARGS, 1))
+
+    def __iter__(self):
+        yield self.expr
 
 class Finally(AExpression):
     def __init__(self, body, final):
@@ -446,7 +755,7 @@ class Finally(AExpression):
 
         return current, max_size
 
-    def emit(self, ctx):
+    def _emit(self, ctx):
         jmp = AbsoluteJump(ctx, SETUP_FINALLY)
         self.body.emit(ctx)
         endjmp = AbsoluteJump(ctx)
@@ -456,6 +765,10 @@ class Finally(AExpression):
         self.final.emit(ctx)
         ctx.stream.write(struct.pack("=BB", POP_TOP, END_FINALLY))
         endjmp.mark()
+
+    def __iter__(self):
+        yield self.body
+        yield self.final
 
 
 
@@ -487,29 +800,98 @@ _initCompareOps()
 class Argument(Local):
     def __init__(self, name):
         Local.__init__(self, name)
+    def __repr__(self):
+        return "Argument(" + self.name + ")"
+
+
+class RestArgument(Argument):
+    def __init__(self, name):
+        Local.__init__(self, name)
+
+
+class LineNo(AExpression):
+    def __init__(self, expr, lineno):
+        assert isinstance(lineno, int)
+        assertExpression(expr)
+
+        self.expr = expr
+        self.lineno = lineno
+
+    def size(self, current, max_size):
+        return self.expr.size(current, max_size)
+
+    def _emit(self, cxt):
+        if ctx.lastlineno is None:
+            ctx.lastlineno = self.lineno
+            ctx.lastbc = ctx.stream.tell()
+            ctx.startlineno = ctx.lastlineno
+        else:
+            bcoffset = ctx.stream.tell() - ctx.lastbc
+            linenooffset = ctx.lineno - ctx.lastlineno
+
+            assert bcoffset <= 255 and bcoffset >= 0
+            assert lineoffset <= 255 and lineoffset >= 0
+
+            ctx.stream.write(struct.pack("=BB", bcoffset, lineoffset))
+
+        self.expr.emit(ctx)
 
 
 class RecurPoint(object):
     def __init__(self, offset, args, next):
         self.next = next
         self.args = args
-        self.offset = 0
+        self.offset = offset
+
+
 
 
 
 class Context(object):
     """defines a compilation context this keeps track of locals, output streams, etc"""
-    def __init__(self, recurPoint, varnames = {}):
+    def __init__(self, recurPoint, varnames = {}, filename = "<string>"):
         self.stream = BytesIO()
         self.consts = {}
         self.varnames = varnames
         self.recurPoint = recurPoint
         self.names = {}
+        self.freevars = {}
+        self.cellvars = []
+        self.linenotab = BytesIO()
+        self.lastlineno = None
+        self.startlineno = None
+        self.lastbc = None
+        self.filename = filename
+
+
+    def pushRecurPoint(self, args):
+        self.recurPoint = RecurPoint(self.stream.tell(), args, self.recurPoint)
+
+    def popRecurPoint(self):
+        self.recurPoint = self.recurPoint.next
+
+    def emitLineNo(self, lineno):
+        if self.lastlineno == None:
+            self.lastlineno = lineno
+            self.startlineno = lineno
+            self.lastbc = self.stream.tell()
+            return
+
+        linenodelta = lineno - self.lastlineno
+        bcdelta = self.stream.tell() - self.lastbc
+
+        assert linenodelta >= 0
+        assert linenodelta <= 255
+        assert bcdelta >= 0
+        assert bcdelta <= 255
+        self.linenotab.write(struct.pack("=BB", linenodelta, bcdelta))
 
 
 
 
-
+ConstFalse = Const(False)
+ConstTrue = Const(True)
+ConstNone = Const(None)
 
 
 ### Taken from byteplay.py

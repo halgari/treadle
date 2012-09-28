@@ -121,7 +121,8 @@ class TestCompareOps(unittest.TestCase):
             op = globals()[k]
             for t in compare_tests[k]:
                 [v1, v2, result] = t
-                self.assertEqual(op(Const(v1), Const(v2)).toFunc()(), result)
+                d = {"v1" : v1, "v2" : v2}
+                self.assertEqual(op(Global("v1"), Global("v2")).toFunc(globals = d)(), result)
 
 class CallTests(unittest.TestCase):
     def test_Call(self):
@@ -159,14 +160,14 @@ class ListTests(unittest.TestCase):
 
         self.assertEqual(tp, [1, 2])
         self.assertEqual(type(tp), list)
-        
-        
+
+
 class DictTests(unittest.TestCase):
     def test_Dict(self):
         tp = Dict(Const(1), Const(2), Const(3), Const(4)).toFunc()()
 
         self.assertEqual(tp, {1:2, 3: 4})
-        self.assertEqual(type(tp), dict)        
+        self.assertEqual(type(tp), dict)
 
 
 class T(object):
@@ -175,7 +176,8 @@ class T(object):
 
 class AttrTests(unittest.TestCase):
     def test_List(self):
-        num = Call(Attr(Const(T()), "foo")).toFunc()()
+        d = {"T" : T}
+        num = Call(Attr(Call(Global("T")), "foo")).toFunc(globals = d)()
 
         self.assertEqual(num, 42)
 
@@ -197,7 +199,8 @@ class FinallyTests(unittest.TestCase):
             r = 2
             return r
 
-        fb = Finally(Const(1), Call(Const(Foo))).toFunc()
+        d = {"Foo" : Foo}
+        fb = Finally(Const(1), Call(Global("Foo"))).toFunc(globals = d)
 
         self.assertEquals(r, None)
         self.assertEquals(fb(), 1)
