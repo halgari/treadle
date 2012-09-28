@@ -205,3 +205,13 @@ class FinallyTests(unittest.TestCase):
         self.assertEquals(r, None)
         self.assertEquals(fb(), 1)
         self.assertEquals(r, 2)
+
+class ClosureTests(unittest.TestCase):
+    def test_Closure(self):
+        f = Func([Argument("x")],
+                 Func([Argument("y")],
+                      Add(Closure("x", Local("x")), Local("y")),
+                      resolver = lambda x: Closure("x", Argument("x")),
+                      name = "foo"),
+                 name = "bar").toFunc(filename = "bar")
+        self.assertEquals(f(1)(2), 3)

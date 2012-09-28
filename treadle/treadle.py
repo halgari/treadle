@@ -381,6 +381,14 @@ class Local(AExpression, IAssignable):
         current += 1
         return current, max(current, max_count)
 
+    def __eq__(self, other):
+        if not isinstance(other, Local):
+            return False
+        return self.name == other.name
+
+    def __hash__(self):
+        return hash(self.name)
+
     def _emit(self, ctx):
         if self not in ctx.varnames:
             ctx.varnames[self] = len(ctx.varnames)
@@ -532,7 +540,11 @@ class Func(AExpression):
             for x in self.freeVars:
                 idx = len(ctx.cellvars)
                 ctx.cellvars.append(x)
-                resolved = self.resolver(x)
+                #resolved = self.resolver(x)
+                # Bit of a hack...should be re-worked sometime
+                # but to be honest, closure resolution makes my brain
+                # hurt, and I don't feel like jumping into this again
+                resolved = Closure(x, Local(x))
                 assert resolved
 
                 resolved.emitPreamble(ctx)
