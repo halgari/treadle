@@ -1,7 +1,7 @@
 import unittest
-from treadle.treadle import *
-from treadle.treadle_exceptions import *
-from treadle.macros import And
+from ..treadle.treadle import *
+from ..treadle.treadle_exceptions import *
+from ..treadle.macros import And
 
 class ConstTests(unittest.TestCase):
     def setUp(self):

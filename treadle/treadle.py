@@ -24,13 +24,13 @@ class AExpression(object):
         pass
 
     def toCode(self, name = "", filename = "<string>"):
-        print "----"
+        print("----")
         expr = self
 
         locals = {}
         argcount = 0
 
-        print repr(self)
+        print(repr(self))
 
 
         co_flags = 0
@@ -93,7 +93,7 @@ class AExpression(object):
 
         if freevars or ctx.cellvars:
             co_flags ^= CO_NOFREE
-        print freevars, "freevars", ctx.cellvars, "cellvars"
+        print(freevars, "freevars", ctx.cellvars, "cellvars")
         c = newCode(co_code = code, co_stacksize = max_seen, co_consts = consts, co_varnames = varnames,
                     co_argcount = argcount, co_nlocals = len(varnames), co_names = names, co_flags = co_flags,
                     co_freevars = freevars, co_cellvars = tuple(ctx.cellvars), filename = filename, name = name)
@@ -186,7 +186,7 @@ class Return(AExpression):
     def __iter__(self):
         yield self.expr
 
-valid_const_types = {str, int, float, bool, type(None), type(type), types.CodeType, unicode}
+valid_const_types = {str, int, float, bool, type(None), type(type), types.CodeType}
 
 class Const(AExpression):
     """defines a constant that will generate a LOAD_CONST bytecode. Note: Const objects
@@ -374,7 +374,7 @@ class Do(AExpression):
 
 class Local(AExpression, IAssignable):
     def __init__(self, name):
-        assert isinstance(name, (str, unicode))
+        assert isinstance(name, (str))
         self.name = name
 
     def size(self, current, max_count):
