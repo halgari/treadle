@@ -77,10 +77,10 @@ class ArgTests(unittest.TestCase):
         a = Argument("a")
         self.assertEqual(Func([a], a).toFunc()(42), 42)
 
-class StoreLocalTests(unittest.TestCase):
-    def test_StoreLocal(self):
+class StoreToLocalTests(unittest.TestCase):
+    def test_StoreToLocal(self):
         a = Local("a")
-        self.assertEqual(StoreLocal(a, Const(42)).toFunc()(), 42)
+        self.assertEqual(StoreToLocal(Const(42), a).toFunc()(), 42)
 
 
 compare_tests = {"Lesser": [[1, 2, True],
@@ -205,6 +205,13 @@ class FinallyTests(unittest.TestCase):
         self.assertEquals(r, None)
         self.assertEquals(fb(), 1)
         self.assertEquals(r, 2)
+
+class StoreToGlobalTests(unittest.TestCase):
+    def test_StoreToGlobal(self):
+        g = {}
+        f = StoreToGlobal(Const(42), "forty-two").toFunc(globals = g)
+        f()
+        self.assertEquals(g, {"forty-two": 42})
 
 class ClosureTests(unittest.TestCase):
     def test_Closure(self):

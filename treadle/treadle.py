@@ -223,8 +223,8 @@ class Const(AExpression):
     def __iter__(self):
         raise StopIteration()
 
-class StoreLocal(AExpression):
-    def __init__(self, local, expr):
+class StoreToLocal(AExpression):
+    def __init__(self, expr, local):
         assertAllExpressions([local, expr])
 
         self.local = local
@@ -246,6 +246,33 @@ class StoreLocal(AExpression):
 
     def __iter__(self):
         yield self.local
+        yield self.expr
+
+
+class StoreToGlobal(AExpression):
+    def __init__(self, expr, gbl):
+        assert isinstance(gbl, str)
+        assertAllExpressions([expr])
+
+        self.gbl = gbl
+        self.expr = expr
+    def size(self, current, max_seen):
+        current, max_seen = self.expr.size(current, max_seen)
+
+        return current, max(max_seen, current + 1)
+
+    def _emit(self, ctx):
+        if self.gbl not in ctx.names:
+            ctx.names[self.gbl] = len(ctx.names)
+
+        idx = ctx.names[self.gbl]
+
+        self.expr.emit(ctx)
+
+        ctx.stream.write(struct.pack("=BBH", DUP_TOP, STORE_GLOBAL, idx))
+
+    def __iter__(self):
+        yield self.gbl
         yield self.expr
 
 
